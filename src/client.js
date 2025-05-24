@@ -1,5 +1,5 @@
 // --- Signaling Server (VERY BASIC, for demonstration only) ---
-const SIGNALING_SERVER_URL = `${window.location.protocol === 'https' ? 'wss' : 'ws'}://${window.location.hostname}:${window.location.port}`;
+const SIGNALING_SERVER_URL = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.hostname}:${window.location.port}`;
 let ws;
 let localPeerId = '';
 let remotePeerId = '';
