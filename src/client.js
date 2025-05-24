@@ -1,5 +1,5 @@
 // --- Signaling Server (VERY BASIC, for demonstration only) ---
-const SIGNALING_SERVER_URL = `ws://${window.location.hostname}:${window.location.port}`;
+const SIGNALING_SERVER_URL = `${window.location.protocol === 'https' ? 'wss' : 'ws'}://${window.location.hostname}:${window.location.port}`;
 let ws;
 let localPeerId = '';
 let remotePeerId = '';
@@ -749,6 +749,13 @@ window.onload = () => {
     document.getElementById('accept-call-button').addEventListener('click', () => acceptIncomingCall({ from: remotePeerId }));
     document.getElementById('decline-call-button').addEventListener('click', declineIncomingCall);
     document.getElementById('queue-offline-messages').addEventListener('change', updateSendButtonState);
+
+    document.getElementById('message-input').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent default form submission
+            sendMessage();
+        }
+    });
     document.getElementById('remote-peer-id').addEventListener('input', () => {
         // When remote ID changes, update button state and load history for new peer
         updateSendButtonState();
@@ -757,6 +764,20 @@ window.onload = () => {
             loadMessages(localPeerId, newRemoteId);
         } else {
             document.getElementById('chat-container').innerHTML = ''; // Clear chat if no remote ID
+        }
+    });
+
+    document.getElementById('remote-peer-id').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent default form submission
+            initiateCall();
+        }
+    });
+
+    document.getElementById('local-peer-id').addEventListener('keypress', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent default form submission if it's in a form
+            setLocalPeerId();
         }
     });
 
