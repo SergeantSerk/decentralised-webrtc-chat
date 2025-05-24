@@ -1,5 +1,5 @@
 // --- Signaling Server (VERY BASIC, for demonstration only) ---
-const SIGNALING_SERVER_URL = `ws://${window.location.hostname}:8080`;
+const SIGNALING_SERVER_URL = `ws://${window.location.hostname}:${window.location.port}`;
 let ws;
 let localPeerId = '';
 let remotePeerId = '';
