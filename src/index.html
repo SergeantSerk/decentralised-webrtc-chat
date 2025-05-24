@@ -5,95 +5,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Decentralized WebRTC Chat</title>
-    <style>
-        body {
-            font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        #chat-container {
-            border: 1px solid #ccc;
-            padding: 10px;
-            width: 400px;
-            height: 300px;
-            overflow-y: scroll;
-            margin-bottom: 10px;
-        }
-
-        #message-input {
-            width: 300px;
-            padding: 5px;
-        }
-
-        #send-button {
-            padding: 5px 10px;
-        }
-
-        .controls {
-            margin-top: 20px;
-        }
-
-        .peer-id-input {
-            margin-bottom: 10px;
-        }
-
-        #safety-code {
-            margin-top: 10px;
-            font-weight: bold;
-            color: green;
-        }
-
-        #call-buttons button {
-            margin-right: 5px;
-        }
-
-        #connection-actions button {
-            margin-top: 10px;
-            margin-right: 5px;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-    <h1>Decentralized WebRTC Chat</h1>
+    <div class="container">
+        <header>
+            <h1>WebRTC Chat</h1>
+            <p id="status">Initializing...</p>
+        </header>
 
-    <div class="controls">
-        <label for="local-peer-id">Your Peer ID:</label>
-        <input type="text" id="local-peer-id" placeholder="Enter your unique ID">
-        <button onclick="setLocalPeerId()">Set ID</button>
-        <p>Status: <span id="status">Disconnected</span></p>
+        <section class="connection-setup">
+            <h2>Setup</h2>
+            <div class="form-group">
+                <label for="local-peer-id">Your Peer ID:</label>
+                <input type="text" id="local-peer-id" placeholder="Enter your unique ID">
+                <button id="set-local-id-button">Set My ID</button>
+            </div>
+            <div class="form-group">
+                <label for="remote-peer-id">Remote Peer ID:</label>
+                <input type="text" id="remote-peer-id" placeholder="Enter remote peer's ID" disabled>
+            </div>
+            <div class="actions">
+                <button id="connect-button" disabled>Connect</button>
+                <button id="accept-call-button" style="display:none;">Accept Call</button>
+                <button id="decline-call-button" style="display:none;">Decline Call</button>
+            </div>
+        </section>
 
-        <hr>
+        <main id="chat-section" style="display:none;">
+            <div class="chat-info">
+                <p id="safety-code">Safety Code: N/A</p>
+                <p id="connection-type-display">Connection Type: N/A</p>
+            </div>
 
-        <label for="remote-peer-id">Connect to Peer ID:</label>
-        <input type="text" id="remote-peer-id" placeholder="Enter remote peer ID">
-        <button id="connect-button">Connect</button>
+            <div id="chat-container">
+                <!-- Messages will appear here -->
+            </div>
 
-        <div id="connection-actions" style="display: none;">
-            <button id="disconnect-button">Disconnect</button>
-        </div>
+            <div class="message-input-area">
+                <input type="text" id="message-input" placeholder="Type your message..." disabled>
+                <button id="send-button" disabled>Send</button>
+            </div>
+            <div class="chat-options">
+                <label>
+                    <input type="checkbox" id="queue-offline-messages"> Queue offline messages
+                </label>
+            </div>
+            <div id="connection-actions" class="actions" style="display:none;">
+                <button id="disconnect-button">Disconnect</button>
+            </div>
+        </main>
 
-        <div id="call-buttons" style="display: none;">
-            <button id="accept-call-button" style="display: none;">Accept Incoming Call</button>
-            <button id="decline-call-button" style="display: none;">Decline Call</button>
-        </div>
     </div>
-
-    <hr>
-
-    <div id="chat-container"></div>
-    <input type="text" id="message-input" placeholder="Type your message...">
-    <button id="send-button" onclick="sendMessage()">Send</button>
-    <p>
-        <input type="checkbox" id="queue-offline-messages" checked>
-        <label for="queue-offline-messages">Queue messages if peer is offline</label>
-    </p>
-
-    <p id="safety-code">Safety Code: N/A</p>
-    <p><span id="connection-type-display">Connection Type: N/A</span></p>
-
     <script src="client.js"></script>
 </body>
 
