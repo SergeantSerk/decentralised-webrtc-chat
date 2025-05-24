@@ -4,7 +4,6 @@ let ws;
 let localPeerId = '';
 let remotePeerId = '';
 let isPeerOnline = false; // Track remote peer's online status, based *only* on explicit checks
-let incomingOffer = null; // To store incoming offer message
 
 // --- WebRTC Setup ---
 let pc = null;
@@ -178,7 +177,6 @@ function setupWebSocket() {
                 // Allow new offer if we are not currently connected or if it's from current remoteId
                 if (remotePeerId && message.from !== remotePeerId && pc && pc.connectionState !== 'closed') {
                     console.warn(`Ignoring offer from ${message.from}. Already connected to ${remotePeerId}.`);
-                    // Send reject message to the new offerer
                     ws.send(JSON.stringify({
                         type: 'reject-offer',
                         to: message.from,
@@ -188,17 +186,16 @@ function setupWebSocket() {
                     return;
                 }
 
-                incomingOffer = message; // Store the incoming offer
                 remotePeerId = message.from;
                 document.getElementById('remote-peer-id').value = remotePeerId;
                 appendMessage('System', `Incoming call from ${remotePeerId}.`);
                 document.getElementById('accept-call-button').style.display = 'inline-block';
                 document.getElementById('decline-call-button').style.display = 'inline-block';
                 document.getElementById('connect-button').style.display = 'none';
-                document.getElementById('chat-section').style.display = 'block'; // Show chat section for call handling
                 document.getElementById('connection-actions').style.display = 'none';
 
-                // Do NOT automatically accept. User will click the accept button.
+                // Automatically accept for this demo, but user interaction is better
+                await acceptIncomingCall(message);
                 break;
             case 'answer':
                 await pc.setRemoteDescription(new RTCSessionDescription(message.answer));
@@ -216,7 +213,6 @@ function setupWebSocket() {
             case 'dh-public-key':
                 await importPublicKey(message.key);
                 await deriveSharedSecret();
-                updateSendButtonState(); // Add this call
                 break;
             case 'peer-disconnected': // This is for when the other peer explicitly disconnects
                 // Check if the disconnected peer is our current active remotePeerId
@@ -228,7 +224,6 @@ function setupWebSocket() {
                 break;
             case 'offer-rejected':
                 appendMessage('System', `${message.from} rejected your call: ${message.reason}`);
-                document.getElementById('connect-button').disabled = false; // Re-enable connect button
                 resetConnectionState();
                 break;
         }
@@ -238,7 +233,7 @@ function setupWebSocket() {
         console.log('Disconnected from signaling server');
         updateStatus('Disconnected from signaling server');
         isPeerOnline = false;
-        resetConnectionState(true); // Pass true to indicate a full reset due to WS close
+        resetConnectionState();
     };
 
     ws.onerror = (error) => {
@@ -266,17 +261,16 @@ async function createPeerConnection() {
         console.log('RTC Connection State:', pc.connectionState);
         updateStatus(`RTC Connection: ${pc.connectionState}`);
         if (pc.connectionState === 'connected') {
-            document.getElementById('chat-section').style.display = 'block';
             appendMessage('System', 'WebRTC connection established!');
             document.getElementById('connect-button').style.display = 'none';
             document.getElementById('connection-actions').style.display = 'block';
-            document.getElementById('accept-call-button').style.display = 'none';
-            document.getElementById('decline-call-button').style.display = 'none';
             checkConnectionType(pc); // Check and display connection type
-        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+        } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
             appendMessage('System', 'WebRTC connection disconnected or failed.');
             updateConnectionTypeDisplay('N/A');
             if (remotePeerId) handlePeerDisconnect();
+        } else if (pc.connectionState === 'closed') {
+            updateConnectionTypeDisplay('N/A');
         }
         updateSendButtonState();
     };
@@ -351,7 +345,6 @@ async function initiateCall() {
         return;
     }
 
-    document.getElementById('chat-section').style.display = 'block'; // Show chat area when initiating a call
     document.getElementById('connect-button').disabled = true;
     appendMessage('System', `Checking if ${remotePeerId} is online...`);
     ws.send(JSON.stringify({
@@ -382,34 +375,28 @@ async function initiateCallProceed() {
     updateSendButtonState();
 }
 
-async function acceptIncomingCall(offerMessage) {
-    if (!offerMessage) {
-        console.error("Cannot accept call, offer message is missing.");
-        return;
-    }
+async function acceptIncomingCall(message) {
     document.getElementById('accept-call-button').style.display = 'none';
     document.getElementById('decline-call-button').style.display = 'none';
     document.getElementById('connect-button').style.display = 'none';
     document.getElementById('connection-actions').style.display = 'block';
-    document.getElementById('chat-section').style.display = 'block';
 
     if (!pc) await createPeerConnection();
 
     await generateDhKeys();
 
-    await pc.setRemoteDescription(new RTCSessionDescription(offerMessage.offer));
+    await pc.setRemoteDescription(new RTCSessionDescription(message.offer));
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
     ws.send(JSON.stringify({
         type: 'answer',
-        to: offerMessage.from,
+        to: message.from,
         answer: answer
     }));
-    updateStatus(`Accepted call from ${offerMessage.from}`);
-    appendMessage('System', `Accepted call from ${offerMessage.from}. Exchanging encryption keys...`);
+    updateStatus(`Accepted call from ${message.from}`);
+    appendMessage('System', `Accepted call from ${message.from}. Exchanging encryption keys...`);
     updateSendButtonState();
-    incomingOffer = null; // Clear the stored offer
 }
 
 function declineIncomingCall() {
@@ -420,8 +407,7 @@ function declineIncomingCall() {
         reason: 'Declined by user',
         from: localPeerId
     }));
-    resetConnectionState(); // Resets UI elements
-    incomingOffer = null; // Clear the stored offer
+    resetConnectionState();
 }
 
 function disconnectPeer() {
@@ -449,34 +435,24 @@ function handlePeerDisconnect() {
     remotePublicKey = null;
     isPeerOnline = false;
     updateStatus('Peer disconnected. Connection closed.');
-    appendMessage('System', `Disconnected from ${remotePeerId || 'peer'}.`);
     document.getElementById('safety-code').textContent = 'Safety Code: N/A';
     updateConnectionTypeDisplay('N/A');
     resetConnectionState();
-    incomingOffer = null; // Ensure any pending offer is cleared
 }
 
-function resetConnectionState(isWsClosed = false) {
-    // Clear remotePeerId and its input field only if the connection was truly lost or reset,
-    // not just for a rejected offer where user might want to retry.
-    if (!pc && !dataChannel && !incomingOffer) {
+function resetConnectionState() {
+    // Only clear remotePeerId if it was the currently connected peer
+    // This allows keeping the ID in the input if we just disconnected locally
+    if (remotePeerId && !pc && !dataChannel) { // Check if connection truly closed
         remotePeerId = '';
         document.getElementById('remote-peer-id').value = '';
     }
-
-    incomingOffer = null;
     document.getElementById('accept-call-button').style.display = 'none';
     document.getElementById('decline-call-button').style.display = 'none';
     document.getElementById('connect-button').style.display = 'inline-block';
-    document.getElementById('connect-button').disabled = !localPeerId || (ws && ws.readyState !== WebSocket.OPEN);
     document.getElementById('connection-actions').style.display = 'none';
     updateConnectionTypeDisplay('N/A');
-
-    if (!localPeerId || isWsClosed) { // If no local ID is set, or WebSocket is closed, hide chat section
-        document.getElementById('chat-section').style.display = 'none';
-    }
     updateSendButtonState();
-    if (localPeerId && !isWsClosed) updateStatus('Ready to connect or awaiting call.');
 }
 
 async function sendMessage() {
@@ -556,21 +532,9 @@ function updateStatus(message) {
 function appendMessage(sender, message) {
     const chatContainer = document.getElementById('chat-container');
     const msgElement = document.createElement('p');
-    const senderStrong = document.createElement('strong');
-    senderStrong.textContent = `${sender}: `;
-    msgElement.appendChild(senderStrong);
-    msgElement.appendChild(document.createTextNode(message));
-
-    if (sender === localPeerId) {
-        msgElement.classList.add('local-message');
-    } else if (sender === 'System') {
-        msgElement.classList.add('system-message');
-    } else {
-        msgElement.classList.add('remote-message');
-    }
-
+    msgElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
     chatContainer.appendChild(msgElement);
-    chatContainer.scrollTop = chatContainer.scrollHeight; // Auto-scroll
+    chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
 function updateConnectionTypeDisplay(type) {
@@ -578,7 +542,7 @@ function updateConnectionTypeDisplay(type) {
     if (el) {
         el.textContent = `Connection Type: ${type}`;
     } else {
-        console.warn('UI element #connection-type-display not found.'); // for debugging if element is missing
+        // console.warn('UI element #connection-type-display not found.'); // Optional: for debugging if element is missing
     }
 }
 
@@ -600,12 +564,12 @@ async function checkConnectionType(peerConnection) {
             }
         });
 
-        if (activeCandidatePairReport?.localCandidateId) {
+        if (activeCandidatePairReport && activeCandidatePairReport.localCandidateId) {
             localCandidateReport = stats.get(activeCandidatePairReport.localCandidateId);
         }
 
         let connectionMethod = 'N/A';
-        if (localCandidateReport?.candidateType) {
+        if (localCandidateReport && localCandidateReport.candidateType) {
             switch (localCandidateReport.candidateType) {
                 case 'host':
                     connectionMethod = 'Direct (Host)';
@@ -642,30 +606,20 @@ async function checkConnectionType(peerConnection) {
 function setLocalPeerId() {
     const id = document.getElementById('local-peer-id').value.trim();
     if (id) {
-        if (ws && ws.readyState === WebSocket.OPEN && localPeerId && localPeerId !== id) {
-            // If changing ID while already connected to signaling, ideally re-register.
-            // For simplicity, we might require a page refresh or handle this more gracefully.
-            // Current logic: if ws exists, it sends register. If not, setupWebSocket is called which registers on open.
-        }
         localPeerId = id;
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'register', id: localPeerId }));
-        } else if (!ws || ws.readyState === WebSocket.CLOSED) { // Only setup new WebSocket if none exists or it's closed
+        } else {
             setupWebSocket();
         }
         updateStatus(`Attempting to register as ${localPeerId}...`);
         document.getElementById('local-peer-id').disabled = true;
-        document.getElementById('set-local-id-button').disabled = true;
-        document.getElementById('remote-peer-id').disabled = false;
-        document.getElementById('connect-button').disabled = false;
-        document.getElementById('chat-section').style.display = 'block'; // Show chat section
-
         if (remotePeerId) { // Load conversation if a remote peer is already specified
             loadMessages(localPeerId, remotePeerId);
         }
         updateSendButtonState(); // Update send button state after setting local ID
     } else {
-        alert('Please enter a Peer ID for yourself.');
+        alert('Please enter a unique ID for yourself.');
     }
 }
 
@@ -856,34 +810,23 @@ function sendPendingMessagesForPeer(peerId) {
 
 // Initial setup
 window.onload = () => {
-    // Initial UI States
-    document.getElementById('local-peer-id').disabled = false;
-    document.getElementById('set-local-id-button').disabled = false;
-
-    document.getElementById('remote-peer-id').disabled = true;
-    document.getElementById('connect-button').disabled = true;
     document.getElementById('message-input').disabled = true;
     document.getElementById('send-button').disabled = true;
-
-    document.getElementById('chat-section').style.display = 'none';
     document.getElementById('accept-call-button').style.display = 'none';
     document.getElementById('decline-call-button').style.display = 'none';
     document.getElementById('connection-actions').style.display = 'none';
 
+    // Initialize connection type display
     const connTypeEl = document.getElementById('connection-type-display');
     if (connTypeEl) connTypeEl.textContent = 'Connection Type: N/A';
 
-    // Event Listeners
-    document.getElementById('set-local-id-button').addEventListener('click', setLocalPeerId);
+
     document.getElementById('connect-button').addEventListener('click', initiateCall);
     document.getElementById('disconnect-button').addEventListener('click', disconnectPeer);
-    document.getElementById('accept-call-button').addEventListener('click', () => {
-        if (incomingOffer) {
-            acceptIncomingCall(incomingOffer);
-        }
-    });
+    document.getElementById('accept-call-button').addEventListener('click', () => acceptIncomingCall({ from: remotePeerId }));
     document.getElementById('decline-call-button').addEventListener('click', declineIncomingCall);
     document.getElementById('queue-offline-messages').addEventListener('change', updateSendButtonState);
+
     document.getElementById('message-input').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevent default form submission
@@ -891,22 +834,23 @@ window.onload = () => {
         }
     });
     document.getElementById('remote-peer-id').addEventListener('input', () => {
+        // When remote ID changes, update button state and load history for new peer
         updateSendButtonState();
         const newRemoteId = document.getElementById('remote-peer-id').value.trim();
         if (localPeerId && newRemoteId) {
             loadMessages(localPeerId, newRemoteId);
-        } else if (localPeerId && !newRemoteId) {
+        } else {
             document.getElementById('chat-container').innerHTML = ''; // Clear chat if no remote ID
-        } else if (!localPeerId) {
-            document.getElementById('chat-container').innerHTML = '';
         }
     });
+
     document.getElementById('remote-peer-id').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevent default form submission
             initiateCall();
         }
     });
+
     document.getElementById('local-peer-id').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault(); // Prevent default form submission if it's in a form
@@ -914,7 +858,5 @@ window.onload = () => {
         }
     });
 
-    openDb().then(() => { // Open DB on load
-        console.log("Database ready.");
-    }).catch(err => console.error("Failed to open DB on load:", err));
+    updateSendButtonState();
 };
