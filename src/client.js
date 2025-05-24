@@ -264,9 +264,13 @@ async function createPeerConnection() {
             appendMessage('System', 'WebRTC connection established!');
             document.getElementById('connect-button').style.display = 'none';
             document.getElementById('connection-actions').style.display = 'block';
+            checkConnectionType(pc); // Check and display connection type
         } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
             appendMessage('System', 'WebRTC connection disconnected or failed.');
+            updateConnectionTypeDisplay('N/A');
             if (remotePeerId) handlePeerDisconnect();
+        } else if (pc.connectionState === 'closed') {
+            updateConnectionTypeDisplay('N/A');
         }
         updateSendButtonState();
     };
@@ -432,6 +436,7 @@ function handlePeerDisconnect() {
     isPeerOnline = false;
     updateStatus('Peer disconnected. Connection closed.');
     document.getElementById('safety-code').textContent = 'Safety Code: N/A';
+    updateConnectionTypeDisplay('N/A');
     resetConnectionState();
 }
 
@@ -446,6 +451,7 @@ function resetConnectionState() {
     document.getElementById('decline-call-button').style.display = 'none';
     document.getElementById('connect-button').style.display = 'inline-block';
     document.getElementById('connection-actions').style.display = 'none';
+    updateConnectionTypeDisplay('N/A');
     updateSendButtonState();
 }
 
@@ -529,6 +535,72 @@ function appendMessage(sender, message) {
     msgElement.innerHTML = `<strong>${sender}:</strong> ${message}`;
     chatContainer.appendChild(msgElement);
     chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function updateConnectionTypeDisplay(type) {
+    const el = document.getElementById('connection-type-display');
+    if (el) {
+        el.textContent = `Connection Type: ${type}`;
+    } else {
+        // console.warn('UI element #connection-type-display not found.'); // Optional: for debugging if element is missing
+    }
+}
+
+async function checkConnectionType(peerConnection) {
+    if (!peerConnection) {
+        updateConnectionTypeDisplay('N/A');
+        return;
+    }
+
+    try {
+        const stats = await peerConnection.getStats();
+        let activeCandidatePairReport = null;
+        let localCandidateReport = null;
+
+        stats.forEach(report => {
+            // Find the active candidate pair
+            if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                activeCandidatePairReport = report;
+            }
+        });
+
+        if (activeCandidatePairReport && activeCandidatePairReport.localCandidateId) {
+            localCandidateReport = stats.get(activeCandidatePairReport.localCandidateId);
+        }
+
+        let connectionMethod = 'N/A';
+        if (localCandidateReport && localCandidateReport.candidateType) {
+            switch (localCandidateReport.candidateType) {
+                case 'host':
+                    connectionMethod = 'Direct (Host)';
+                    break;
+                case 'srflx':
+                    connectionMethod = 'STUN (Server Reflexive)';
+                    break;
+                case 'prflx': // Peer reflexive, also STUN-like
+                    connectionMethod = 'STUN (Peer Reflexive)';
+                    break;
+                case 'relay':
+                    connectionMethod = 'TURN (Relayed)';
+                    break;
+                default:
+                    connectionMethod = `Unknown (${localCandidateReport.candidateType})`;
+                    break;
+            }
+            appendMessage('System', `Connection established via: ${connectionMethod}`);
+        } else if (activeCandidatePairReport) {
+            appendMessage('System', `Connection type: Could not determine local candidate details for the active pair.`);
+            connectionMethod = 'Partially Determined (Stats Incomplete)';
+        } else {
+            appendMessage('System', `Connection type: No successful candidate pair found in stats.`);
+        }
+        updateConnectionTypeDisplay(connectionMethod);
+
+    } catch (error) {
+        console.error('Error getting WebRTC stats for connection type:', error);
+        updateConnectionTypeDisplay('Error retrieving type');
+        appendMessage('System', `Error determining connection type: ${error.message}`);
+    }
 }
 
 function setLocalPeerId() {
@@ -743,6 +815,11 @@ window.onload = () => {
     document.getElementById('accept-call-button').style.display = 'none';
     document.getElementById('decline-call-button').style.display = 'none';
     document.getElementById('connection-actions').style.display = 'none';
+
+    // Initialize connection type display
+    const connTypeEl = document.getElementById('connection-type-display');
+    if (connTypeEl) connTypeEl.textContent = 'Connection Type: N/A';
+
 
     document.getElementById('connect-button').addEventListener('click', initiateCall);
     document.getElementById('disconnect-button').addEventListener('click', disconnectPeer);
