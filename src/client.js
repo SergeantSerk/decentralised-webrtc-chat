@@ -701,6 +701,12 @@ function openDb() {
 }
 
 async function storeMessage(message) {
+    const persistHistoryCheckbox = document.getElementById('persist-history');
+    if (persistHistoryCheckbox && !persistHistoryCheckbox.checked) {
+        console.log('Message history persistence is disabled. Message not stored.');
+        return;
+    }
+
     if (!db) {
         await openDb();
     }
