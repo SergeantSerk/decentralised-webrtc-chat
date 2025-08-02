@@ -15,9 +15,7 @@ const configuration = {
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun2.l.google.com:19302' },
         { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        { urls: 'stun:freestun.net:3478' },
-        { urls: 'turn:freestun.net:3478', username: 'free', credential: 'free' }
+        { urls: 'stun:stun4.l.google.com:19302' }
     ]
 };
 
@@ -247,7 +245,13 @@ function setupWebSocket() {
 
 // --- WebRTC Setup ---
 async function createPeerConnection() {
-    pc = new RTCPeerConnection(configuration);
+    //pc = new RTCPeerConnection(configuration);
+    const response =
+        await fetch("https://protocol.metered.live/api/v1/turn/credentials?apiKey=e9e8ac117cba1afff32065159e80277b5713");
+
+    // Saving the response in the iceServers array
+    const iceServers = await response.json();
+    pc = new RTCPeerConnection({iceServers: iceServers});
 
     pc.onicecandidate = (event) => {
         if (event.candidate) {
