@@ -73,6 +73,7 @@ async function deriveSharedSecret() {
     console.log('Derived AES-GCM encryption key.');
 
     displaySafetyCode();
+    updateSendButtonState(); // <-- Add this line
 }
 
 async function encryptMessage(message) {
@@ -324,6 +325,7 @@ function setupDataChannelEvents() {
     dataChannel.onerror = (error) => {
         console.error('DataChannel error:', error);
         updateStatus('DataChannel error. Check console.');
+        updateSendButtonState(); // <-- Add this line for error case
     };
 }
 
@@ -538,11 +540,19 @@ function updateSendButtonState() {
     const messageInput = document.getElementById('message-input');
     const sendButton = document.getElementById('send-button');
 
-    // Enable if dataChannel is open AND encryptionKey is ready (for direct E2EE chat)
-    // OR if queuing is enabled AND a remotePeerId is specified (to allow queuing for offline peers)
-    if ((dataChannel && dataChannel.readyState === 'open' && encryptionKey) ||
-        (queueOffline && remotePeerId && localPeerId && ws && ws.readyState === WebSocket.OPEN)) {
+    // Enable if:
+    // - DataChannel is open AND encryptionKey is ready (for direct E2EE chat)
+    // - OR queuing is enabled AND remotePeerId is specified AND signaling server is connected
+    // - OR DataChannel is open but encryptionKey is not yet ready (allow user to type, but not send)
+    if (
+        (dataChannel && dataChannel.readyState === 'open' && encryptionKey) ||
+        (queueOffline && remotePeerId && localPeerId && ws && ws.readyState === WebSocket.OPEN)
+    ) {
         sendButton.disabled = false;
+        messageInput.disabled = false;
+    } else if (dataChannel && dataChannel.readyState === 'open' && !encryptionKey) {
+        // Allow typing but not sending if waiting for key
+        sendButton.disabled = true;
         messageInput.disabled = false;
     } else {
         sendButton.disabled = true;
