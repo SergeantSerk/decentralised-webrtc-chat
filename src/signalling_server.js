@@ -110,13 +110,6 @@ wss.on('connection', function connection(ws) {
         if (currentPeerId) {
             clients.delete(currentPeerId);
             console.log(`Peer ${currentPeerId} disconnected from signaling server.`);
-            // When a client closes its WebSocket, notify *all* other connected clients
-            // that this peer is now generally offline. This is a compromise for simplicity.
-            clients.forEach((clientWs, id) => {
-                if (clientWs.readyState === WebSocket.OPEN) {
-                    clientWs.send(JSON.stringify({ type: 'peer-offline', id: currentPeerId }));
-                }
-            });
         } else {
             console.log('Unnamed peer disconnected.');
         }
